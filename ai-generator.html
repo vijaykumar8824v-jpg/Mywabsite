@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>OnlyAI - Text to Image (Real)</title>
+  <style>
+    body {
+      margin:0;
+      font-family: Poppins, sans-serif;
+      background: linear-gradient(135deg,#03102a,#052d5c);
+      color: #e8f4ff;
+      min-height:100vh;
+      display:flex;
+      align-items:flex-start;
+      justify-content:center;
+      padding:40px 16px;
+    }
+    .card {
+      width:100%;
+      max-width:900px;
+      background: rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:14px;
+      padding:22px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+    h1 { margin:0 0 10px 0; color:#7fe0ff; }
+    p { margin:6px 0 18px 0; color:#cfeeff; }
+    textarea {
+      width:100%;
+      min-height:100px;
+      border-radius:10px;
+      border: none;
+      padding:14px;
+      font-size:15px;
+      resize:vertical;
+      background: rgba(255,255,255,0.02);
+      color: #e8f4ff;
+      outline: 1px solid rgba(255,255,255,0.03);
+    }
+    .row { display:flex; gap:12px; margin-top:12px; flex-wrap:wrap; align-items:center; }
+    .btn {
+      padding:10px 16px;
+      border-radius:10px;
+      border:none;
+      cursor:pointer;
+      font-weight:600;
+    }
+    .primary { background:#1ea2ff; color:#021226; }
+    .ghost { background:transparent; color:#cfe8ff; border:1px solid rgba(255,255,255,0.06); }
+
+    .left { flex:1 1 320px; }
+    .right { flex:1 1 320px; text-align:center; }
+    .output-img {
+      width:100%;
+      max-width:440px;
+      border-radius:12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      margin-top:14px;
+    }
+
+    .preset { padding:8px 10px; border-radius:8px; background:rgba(255,255,255,0.02); cursor:pointer; border:1px solid rgba(255,255,255,0.03); }
+    .preset.selected { background:#1ea2ff; color:#021226; border-color:rgba(0,0,0,0.2); }
+
+    .small { font-size:13px; color:#9ecfff; margin-top:8px; }
+    .loader { margin-top:14px; color:#9ecfff; }
+
+    .download { margin-top:12px; display:inline-block; text-decoration:none; padding:10px 12px; border-radius:10px; background:#33b4ff; color:#021226; font-weight:700; }
+
+    @media(max-width:720px){
+      .row { flex-direction:column; align-items:stretch; }
+      .right { text-align:center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>OnlyAI — Real Text → Image</h1>
+    <p>Prompt डालो, स्टाइल चुनो और रियल AI इमेज जेनरेट करो। (Secure via serverless proxy)</p>
+
+    <div class="row">
+      <div class="left">
+        <label for="prompt">Prompt</label>
+        <textarea id="prompt" placeholder="उदाहरण: 'A cinematic portrait of an elderly man, golden hour, dramatic lighting, 4k'"></textarea>
+
+        <div class="row" style="margin-top:10px;">
+          <div>
+            <div class="small">Style</div>
+            <div style="display:flex;gap:8px;margin-top:8px;">
+              <div class="preset selected" data-value="realistic">Realistic</div>
+              <div class="preset" data-value="anime">Anime</div>
+              <div class="preset" data-value="cinematic">Cinematic</div>
+              <div class="preset" data-value="3d">3D</div>
+            </div>
+          </div>
+
+          <div style="margin-left:auto; text-align:right;">
+            <div class="small">Width x Height</div>
+            <select id="size" style="padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);color:#e8f4ff;border:1px solid rgba(255,255,255,0.03);">
+              <option value="512x512">512 × 512</option>
+              <option value="768x768">768 × 768</option>
+              <option value="1024x1024">1024 × 1024</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row">
+          <button class="btn primary" id="generateBtn">Generate Image</button>
+          <button class="btn ghost" id="clearBtn">Clear</button>
+          <div id="status" class="loader"></div>
+        </div>
+
+        <div class="small">Tips: Specific details give better results — lighting, camera lens, mood, colors.</div>
+      </div>
+
+      <div class="right">
+        <div id="outputArea">
+          <img id="outputImg" class="output-img" src="" alt="" style="display:none;" />
+          <div id="placeholder" style="padding:22px;color:#9ecfff;">
+            <div style="font-weight:700;margin-bottom:8px;">Preview</div>
+            <div>Generate an image to see result here</div>
+          </div>
+        </div>
+
+        <a id="downloadLink" class="download" style="display:none;" download="onlyai.png">Download Image</a>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // presets UI
+  document.querySelectorAll('.preset').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      document.querySelectorAll('.preset').forEach(p=>p.classList.remove('selected'));
+      el.classList.add('selected');
+    });
+  });
+
+  const genBtn = document.getElementById('generateBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const promptEl = document.getElementById('prompt');
+  const outputImg = document.getElementById('outputImg');
+  const placeholder = document.getElementById('placeholder');
+  const status = document.getElementById('status');
+  const downloadLink = document.getElementById('downloadLink');
+
+  genBtn.addEventListener('click', async () => {
+    const prompt = promptEl.value.trim();
+    if(!prompt) { alert('Please enter a prompt'); return; }
+
+    const style = document.querySelector('.preset.selected').dataset.value;
+    const size = document.getElementById('size').value;
+
+    // combine prompt with style hints (simple approach)
+    let finalPrompt = prompt;
+    if(style === 'anime') finalPrompt += ', anime style, highly detailed, vibrant colors';
+    if(style === 'cinematic') finalPrompt += ', cinematic lighting, dramatic, film grain';
+    if(style === '3d') finalPrompt += ', 3D render, octane render, realistic materials';
+    if(style === 'realistic') finalPrompt += ', ultra realistic, photorealistic, sharp details';
+
+    status.innerText = 'Generating image... (10-30s)';
+    genBtn.disabled = true;
+
+    try {
+      // CALL YOUR NETLIFY FUNCTION (server-side proxy) - path: /.netlify/functions/generate
+      const res = await fetch('/.netlify/functions/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: finalPrompt, size })
+      });
+
+      if(!res.ok) {
+        const text = await res.text();
+        throw new Error('Server error: ' + text);
+      }
+
+      const data = await res.json();
+      if(!data || !data.b64) throw new Error('No image returned');
+
+      // set image
+      outputImg.src = 'data:image/png;base64,' + data.b64;
+      outputImg.style.display = 'block';
+      placeholder.style.display = 'none';
+      downloadLink.style.display = 'inline-block';
+      downloadLink.href = outputImg.src;
+
+      status.innerText = 'Done';
+    } catch (err) {
+      console.error(err);
+      status.innerText = 'Error: ' + (err.message || err);
+      alert('Error: ' + (err.message || 'Something went wrong'));
+    } finally {
+      genBtn.disabled = false;
+      setTimeout(()=>{ if(status.innerText === 'Done') status.innerText = ''; }, 4000);
+    }
+  });
+
+  clearBtn.addEventListener('click', ()=>{
+    promptEl.value = '';
+    outputImg.style.display = 'none';
+    placeholder.style.display = 'block';
+    downloadLink.style.display = 'none';
+    status.innerText = '';
+  });
+</script>
+</body>
+  </html>
